@@ -6,10 +6,21 @@ from anyapi import API
 
 from .models import Explore, Media
 
+from ratelimit import limits, sleep_and_retry
+
 
 class Instagram(API):
     API_URL = 'https://i.instagram.com/api'
     WEB_URL = 'https://www.instagram.com'
+
+    @sleep_and_retry
+    @limits(calls=1, period=20)
+    def request(self, *args, **kwargs):
+        response = super().request(*args, **kwargs)
+        if response.status_code != 200:
+            raise requests.exceptions.RequestException()
+
+        return response
 
     def web_explore(self) -> requests.Response:
         return self.get(f'{self.WEB_URL}/explore/')
@@ -32,6 +43,4 @@ class Instagram(API):
     def iter_media(self) -> Iterator[Media]:
         for explore in self.iter_explore():
             for sectional_item in explore.sectional_items:
-                layout_content = sectional_item.layout_content
-                items = layout_content.one_by_two_item.clips.items + layout_content.fill_items
-                yield from (item.media for item in items)
+                yield from sectional_item.layout_content.iter_media()
